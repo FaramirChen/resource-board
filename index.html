@@ -1,0 +1,1349 @@
+<meta charset="utf-8">
+<title>算力资源看板</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<script>try { var t = localStorage.getItem('resource-board-theme'); if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<style>
+/* Layout: one-column console — sticky period bar, overview table full width, cluster detail + task stats side by side, cluster trend full width */
+:root {
+  --bg: #eef1f5;
+  --surface: #fcfdfe;
+  --surface-2: #f3f5f8;
+  --seg-bg: #e5e9ef;
+  --ink: #121923;
+  --ink-2: #4a5465;
+  --muted: #6b7686;
+  --line: #e2e6ec;
+  --line-2: #cbd2dc;
+  --sel: #edf2f9;
+  --focus: #2a78d6;
+  --util: #2a78d6;
+  --util-track: #dde9f8;
+  --sched: #eb6834;
+  --sched-track: #fbe6dc;
+  --up: #13803f;
+  --c1: #2a78d6; --c2: #eb6834; --c3: #1baf7a; --c4: #eda100; --c5: #e87ba4;
+  --shadow: 0 1px 2px rgba(18,25,35,.04), 0 10px 28px -18px rgba(18,25,35,.18);
+  --shadow-pop: 0 14px 36px -10px rgba(18,25,35,.25), 0 2px 6px rgba(18,25,35,.06);
+  --font: "Barlow", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --r: 16px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c0f14; --surface: #151a21; --surface-2: #1b212a; --seg-bg: #1a2029;
+    --ink: #edf1f6; --ink-2: #b2bbc8; --muted: #8792a2; --line: #242b35; --line-2: #343d4a;
+    --sel: #1c2533; --focus: #6aa6ee;
+    --util: #3987e5; --util-track: #1b2a3f; --sched: #d95926; --sched-track: #3a241b;
+    --up: #3cc06e;
+    --c1: #3987e5; --c2: #d95926; --c3: #199e70; --c4: #c98500; --c5: #d55181;
+    --shadow: 0 1px 0 rgba(0,0,0,.25), 0 10px 28px -18px rgba(0,0,0,.6);
+    --shadow-pop: 0 14px 36px -10px rgba(0,0,0,.7), 0 2px 6px rgba(0,0,0,.3);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c0f14; --surface: #151a21; --surface-2: #1b212a; --seg-bg: #1a2029;
+  --ink: #edf1f6; --ink-2: #b2bbc8; --muted: #8792a2; --line: #242b35; --line-2: #343d4a;
+  --sel: #1c2533; --focus: #6aa6ee;
+  --util: #3987e5; --util-track: #1b2a3f; --sched: #d95926; --sched-track: #3a241b;
+  --up: #3cc06e;
+  --c1: #3987e5; --c2: #d95926; --c3: #199e70; --c4: #c98500; --c5: #d55181;
+  --shadow: 0 1px 0 rgba(0,0,0,.25), 0 10px 28px -18px rgba(0,0,0,.6);
+  --shadow-pop: 0 14px 36px -10px rgba(0,0,0,.7), 0 2px 6px rgba(0,0,0,.3);
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 var(--font); -webkit-font-smoothing: antialiased; transition: background-color .2s; }
+button { font: inherit; color: inherit; }
+table { font: inherit; color: inherit; border-collapse: separate; border-spacing: 0; width: 100%; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+.mono { font-family: var(--mono); }
+.r { text-align: right; }
+
+.app { max-width: 1440px; margin: 0 auto; padding-inline: clamp(16px, 3vw, 32px); padding-block: 24px 40px; display: grid; gap: 16px; }
+
+/* header */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px 20px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.logo { flex: none; width: 38px; height: 38px; border-radius: 11px; background: var(--ink); color: var(--surface); display: grid; place-items: center; }
+h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: .01em; line-height: 1.25; }
+.sub { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
+.top-right { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.demo-tag { font-size: 12px; color: var(--ink-2); border: 1px solid var(--line-2); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+.theme-switch { display: inline-flex; align-items: center; gap: 8px; border: 0; background: none; padding: 2px; border-radius: 999px; cursor: pointer; color: var(--ink-2); font-size: 12.5px; }
+.theme-switch:hover { color: var(--ink); }
+.ts-track { position: relative; flex: none; width: 44px; height: 24px; border-radius: 999px; background: var(--seg-bg); border: 1px solid var(--line-2); }
+.ts-knob { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: var(--surface); color: var(--ink-2); box-shadow: 0 1px 2px rgba(0,0,0,.25); display: grid; place-items: center; transition: transform .2s ease; }
+.theme-switch[aria-checked="true"] .ts-knob { transform: translateX(20px); }
+.ts-knob .i-moon, .theme-switch[aria-checked="true"] .ts-knob .i-sun { display: none; }
+.theme-switch[aria-checked="true"] .ts-knob .i-moon { display: block; }
+
+/* toolbar */
+.toolbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; padding: 10px; margin-inline: -10px; border-radius: 14px; background: color-mix(in srgb, var(--bg) 84%, transparent); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+.tb-label { font-size: 12px; color: var(--muted); letter-spacing: .04em; }
+.tb-sep { width: 1px; height: 22px; background: var(--line-2); }
+.toolbar .dd-btn { height: 36px; }
+.seg { display: inline-flex; padding: 3px; background: var(--seg-bg); border-radius: 10px; border: 1px solid var(--line); }
+.seg button { border: 0; background: transparent; padding: 4px 14px; border-radius: 7px; cursor: pointer; color: var(--ink-2); font-weight: 500; line-height: 22px; }
+.seg button:hover { color: var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(18,25,35,.1), 0 0 0 1px var(--line); }
+.period { position: relative; display: inline-flex; align-items: center; gap: 4px; }
+.icon-btn { width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid var(--line); background: var(--surface); border-radius: 9px; cursor: pointer; color: var(--ink-2); padding: 0; }
+.icon-btn:hover:not(:disabled) { color: var(--ink); border-color: var(--line-2); }
+.icon-btn:disabled { opacity: .35; cursor: default; }
+.period-btn { height: 36px; display: inline-flex; align-items: center; gap: 8px; padding: 0 12px; border: 1px solid var(--line-2); background: var(--surface); border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 15px; white-space: nowrap; }
+.period-btn:hover { border-color: var(--muted); }
+.period-btn svg { color: var(--muted); flex: none; }
+.p-range { font-weight: 400; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.status { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); }
+.status i { width: 7px; height: 7px; border-radius: 50%; background: var(--line-2); }
+.status.live i { background: var(--up); box-shadow: 0 0 0 3px color-mix(in srgb, var(--up) 20%, transparent); }
+.scope { margin-left: auto; font-size: 12.5px; color: var(--muted); }
+
+/* popovers */
+.pop { position: absolute; top: calc(100% + 8px); left: 0; z-index: 40; width: 348px; max-width: calc(100vw - 32px); background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow-pop); padding: 12px; }
+.pop-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.pop-head strong { font-size: 15px; font-weight: 600; }
+.pop-title { font-size: 12px; color: var(--muted); margin: 2px 2px 10px; }
+.pgrid { display: grid; gap: 6px; }
+.pgrid.g4 { grid-template-columns: repeat(4, 1fr); }
+.pgrid.g3 { grid-template-columns: repeat(3, 1fr); }
+.pcell { position: relative; border: 1px solid transparent; background: var(--surface-2); border-radius: 8px; padding: 7px 0; cursor: pointer; font-variant-numeric: tabular-nums; font-weight: 500; }
+.pcell:hover:not(:disabled) { border-color: var(--line-2); }
+.pcell:disabled { opacity: .3; cursor: default; background: transparent; }
+.pcell.on { background: var(--ink); color: var(--surface); }
+.pcell.live::after { content: ""; position: absolute; top: 4px; right: 4px; width: 5px; height: 5px; border-radius: 50%; background: var(--up); }
+.wk-rows { display: grid; gap: 4px; }
+.wk-row { display: grid; grid-template-columns: 34px 1fr; align-items: center; gap: 6px; }
+.wk-m { font-size: 12px; color: var(--muted); text-align: right; }
+.wk-cells { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.wk-cells .pcell { padding: 4px 0; font-size: 13px; }
+.pop-foot { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; min-height: 29px; }
+
+/* cards */
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 20px 20px 16px; box-shadow: var(--shadow); min-width: 0; scroll-margin-top: 76px; }
+.card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px 20px; flex-wrap: wrap; margin-bottom: 16px; }
+.card-head > * { min-width: 0; }
+.card h2 { margin: 0; font-size: 16px; font-weight: 600; line-height: 1.35; text-wrap: balance; }
+.desc { margin: 3px 0 0; font-size: 12.5px; color: var(--muted); }
+.head-left { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.head-meta { font-size: 12.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; padding-top: 3px; }
+.head-meta b { color: var(--ink); font-weight: 600; }
+.grid-2 { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 16px; }
+.table-wrap { overflow-x: auto; margin-inline: -8px; padding-inline: 8px; }
+
+/* dropdown (三级部门) */
+.dd { position: relative; }
+.dd-btn { display: inline-flex; align-items: center; gap: 10px; height: 40px; padding: 0 12px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--surface); cursor: pointer; }
+.dd-btn:hover:not(:disabled) { border-color: var(--muted); }
+.dd-btn:disabled { cursor: default; background: var(--surface-2); border-color: var(--line); }
+.dd-btn:disabled svg { display: none; }
+.dd-k { font-size: 12px; color: var(--muted); padding-right: 10px; border-right: 1px solid var(--line); line-height: 20px; }
+.dd-v { font-weight: 600; font-size: 15px; white-space: nowrap; }
+.dd-btn svg { color: var(--muted); }
+.dd-menu { width: 320px; padding: 6px; }
+.dd-item { display: grid; grid-template-columns: 16px 1fr auto; align-items: center; gap: 8px; width: 100%; text-align: left; border: 0; background: transparent; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+.dd-item:hover, .dd-item:focus-visible { background: var(--surface-2); }
+.dd-item .ck { color: var(--ink); visibility: hidden; }
+.dd-item[aria-selected="true"] .ck { visibility: visible; }
+.dd-item .nm { font-weight: 600; display: block; }
+.dd-item .pt { font-size: 12px; color: var(--muted); display: block; }
+.dd-item .ct { font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dd-item.all { border-bottom: 1px solid var(--line); border-radius: 8px 8px 0 0; margin-bottom: 4px; }
+
+/* tables */
+.tbl th { font-size: 12px; font-weight: 500; color: var(--muted); text-align: left; padding: 0 12px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.tbl th.r { text-align: right; }
+.tbl td { padding: 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.tbl tbody tr:last-child td { border-bottom: 0; }
+.tbl tr.row { cursor: pointer; transition: background-color .15s; }
+.tbl tr.row:hover { background: var(--surface-2); }
+.tbl tr.row.is-sel { background: var(--sel); }
+.tbl tr.row:focus-visible { outline-offset: -2px; }
+.tbl tfoot td { border-top: 1px solid var(--line-2); border-bottom: 0; padding-top: 14px; font-weight: 600; }
+.sort { border: 0; background: none; padding: 0; cursor: pointer; color: inherit; font: inherit; display: inline-flex; align-items: center; gap: 3px; }
+.sort:hover { color: var(--ink); }
+.sort::after { content: "↕"; opacity: .35; font-size: 11px; }
+th[aria-sort="descending"] .sort, th[aria-sort="ascending"] .sort { color: var(--ink); }
+th[aria-sort="descending"] .sort::after { content: "↓"; opacity: 1; }
+th[aria-sort="ascending"] .sort::after { content: "↑"; opacity: 1; }
+
+.ov { min-width: 760px; }
+.dn { font-weight: 600; font-size: 14.5px; }
+.dp { font-size: 12px; color: var(--muted); margin-top: 1px; white-space: nowrap; }
+.cards { font-weight: 600; font-size: 14.5px; font-variant-numeric: tabular-nums; }
+.chips { display: flex; flex-wrap: nowrap; gap: 4px; }
+.chip { font: 500 11.5px/1 var(--mono); padding: 4px 6px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-2); white-space: nowrap; }
+.chip b { font-weight: 400; color: var(--muted); margin-left: 3px; }
+.go { width: 28px; color: var(--muted); text-align: right; }
+tr.row:hover .go { color: var(--ink); }
+
+.mcell { display: grid; grid-template-columns: minmax(64px, 1fr) 50px; align-items: center; gap: 10px; min-width: 150px; }
+.meter { height: 6px; border-radius: 3px; background: var(--util-track); overflow: hidden; }
+.meter i { display: block; height: 100%; width: 0; border-radius: 3px; background: var(--util); }
+.meter.sched { background: var(--sched-track); }
+.meter.sched i { background: var(--sched); }
+.mval { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* detail */
+.cl { min-width: 600px; }
+.cl .ctype-h { width: 84px; text-align: center; border-right: 1px solid var(--line); }
+.cl td.ctype { width: 84px; text-align: center; font: 600 13px/1 var(--mono); color: var(--ink); background: var(--surface); border-right: 1px solid var(--line); border-bottom-color: var(--line-2); }
+.cl td.ctype.last { border-bottom: 0; }
+.cl tr.avg td:not(.ctype) { background: var(--surface-2); padding-block: 10px; }
+.cl td.avg-name { padding-left: 36px; font-weight: 600; }
+.cl tr.gend td { border-bottom-color: var(--line-2); }
+.cname { display: flex; align-items: flex-start; gap: 10px; }
+.radio { flex: none; width: 14px; height: 14px; margin-top: 3px; border-radius: 50%; border: 1.5px solid var(--line-2); display: grid; place-items: center; }
+tr.row.is-sel .radio { border-color: var(--ink); }
+tr.row.is-sel .radio::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ink); }
+.cn-main { font: 500 13px/1.4 var(--mono); color: var(--ink); word-break: break-all; }
+.cn-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.cn-meta:empty { display: none; }
+.pill { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; line-height: 1; padding: 3px 7px 3px 5px; border-radius: 999px; font-weight: 500; white-space: nowrap; }
+.pill.full { color: var(--ink-2); background: var(--surface-2); border: 1px solid var(--line); }
+
+/* tasks */
+#tasks { container-type: inline-size; }
+.kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 20px; }
+.kpi { padding: 12px 16px; border-left: 1px solid var(--line); min-width: 0; }
+.kpi:first-child { border-left: 0; }
+.k-label { display: block; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.k-val { display: block; font-size: 26px; font-weight: 600; line-height: 1.25; letter-spacing: -.01em; white-space: nowrap; }
+.k-val small { font-size: 12px; font-weight: 500; color: var(--ink-2); margin-left: 3px; letter-spacing: 0; }
+@container (max-width: 440px) { .pies { grid-template-columns: minmax(0, 1fr); } }
+.pies { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.pie { margin: 0; min-width: 0; }
+.pie figcaption { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 10px; font-size: 13.5px; font-weight: 600; }
+.pie figcaption span { font-size: 12px; font-weight: 400; color: var(--muted); }
+.pie-body { position: relative; width: 100%; max-width: 184px; aspect-ratio: 1; margin: 0 auto 14px; }
+.pie-body svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.pie-body path { cursor: default; transition: opacity .15s; outline: none; }
+.pie-body path.dim { opacity: .3; }
+.pie-center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; }
+.pc-val { font-size: 22px; font-weight: 600; line-height: 1.15; white-space: nowrap; }
+.pc-val small { font-size: 12px; font-weight: 500; color: var(--ink-2); margin-left: 2px; }
+.pc-label { font-size: 12px; color: var(--ink-2); margin-top: 2px; white-space: nowrap; }
+.pc-sub { font-size: 11.5px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
+.legend li { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto 46px; gap: 8px; align-items: center; font-size: 12.5px; padding: 4px 6px; border-radius: 6px; }
+.legend li.on { background: var(--surface-2); }
+.legend .sw { width: 10px; height: 10px; border-radius: 3px; }
+.legend .ll { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.legend .lv { color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.legend .lp { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* trend */
+.trend-title { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.trend-title .mono { font-size: 14px; font-weight: 500; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 1px 7px; }
+.lg { display: flex; gap: 8px 18px; flex-wrap: wrap; font-size: 12.5px; color: var(--ink-2); padding-top: 3px; }
+.lg-item { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.lk { width: 16px; height: 2px; border-radius: 1px; }
+.chart { position: relative; }
+#chartSvg { display: block; width: 100%; height: 300px; overflow: visible; touch-action: pan-y; }
+#chartSvg:focus-visible { outline-offset: 4px; border-radius: 6px; }
+#chartSvg .grid line { stroke: var(--line); shape-rendering: crispEdges; }
+#chartSvg .grid line.base { stroke: var(--line-2); }
+#chartSvg .sep { stroke: var(--line); shape-rendering: crispEdges; }
+#chartSvg text { fill: var(--muted); font: 11.5px var(--font); }
+#chartSvg .area { fill: var(--util); opacity: .1; }
+#chartSvg .ln { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+#chartSvg .ln.util { stroke: var(--util); }
+#chartSvg .ln.sched { stroke: var(--sched); }
+#chartSvg .dot { stroke: var(--surface); stroke-width: 2; }
+#chartSvg .dot.util { fill: var(--util); }
+#chartSvg .dot.sched { fill: var(--sched); }
+#chartSvg text.end { fill: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+#chartSvg text.live-note { fill: var(--muted); }
+#chartSvg .cross { stroke: var(--line-2); shape-rendering: crispEdges; }
+.tip { position: absolute; top: 0; left: 0; pointer-events: none; min-width: 160px; background: var(--surface); border: 1px solid var(--line-2); border-radius: 10px; box-shadow: var(--shadow-pop); padding: 8px 10px; font-size: 12.5px; }
+.tip-t { color: var(--muted); font-size: 12px; margin-bottom: 4px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tip-row { display: grid; grid-template-columns: 14px auto 1fr; align-items: center; gap: 7px; white-space: nowrap; }
+.tip-row i { width: 14px; height: 2px; border-radius: 1px; }
+.tip-row b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.tip-row span { color: var(--muted); }
+.chart-foot { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+
+/* notes */
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px 24px; padding: 4px 4px 0; font-size: 12px; color: var(--muted); }
+.notes b { color: var(--ink-2); font-weight: 600; margin-right: 4px; }
+
+@media (max-width: 1120px) { .grid-2 { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 640px) {
+  .card { padding: 16px 14px 12px; }
+  .scope { margin-left: 0; width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+</style>
+
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="5" y="5" width="12" height="12" rx="2.5" stroke="currentColor" stroke-width="1.6"/><rect x="8.5" y="8.5" width="5" height="5" rx="1" fill="currentColor"/><path d="M8 2v2.5M11 2v2.5M14 2v2.5M8 17.5V20M11 17.5V20M14 17.5V20M2 8h2.5M2 11h2.5M2 14h2.5M17.5 8H20M17.5 11H20M17.5 14H20" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </span>
+      <div>
+        <h1>AI 算力资源看板</h1>
+        <p class="sub">三级部门 › 集群 › 卡 · 利用率与调度率</p>
+      </div>
+    </div>
+    <div class="top-right">
+      <button type="button" class="theme-switch" id="themeBtn" role="switch" aria-checked="false" aria-label="深色模式">
+        <span class="ts-track"><span class="ts-knob">
+          <svg class="i-sun" width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.6"/><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <svg class="i-moon" width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M13.5 9.6A5.8 5.8 0 0 1 6.4 2.5a5.8 5.8 0 1 0 7.1 7.1Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        </span></span>
+        <span class="ts-label">浅色</span>
+      </button>
+      <span class="demo-tag">演示数据 · 随机生成</span>
+    </div>
+  </header>
+
+  <div class="toolbar" role="toolbar" aria-label="全局筛选">
+    <div class="dd" id="scopeDD">
+      <button type="button" class="dd-btn" id="scopeBtn" aria-haspopup="listbox" aria-expanded="false">
+        <span class="dd-k">三级部门</span><span class="dd-v" id="scopeName">ALL</span>
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="pop dd-menu" id="scopeMenu" role="listbox" aria-label="筛选三级部门" hidden></div>
+    </div>
+    <span class="tb-sep" aria-hidden="true"></span>
+    <span class="tb-label">统计周期</span>
+    <div class="seg" id="modeSeg">
+      <button type="button" data-mode="week" aria-pressed="true">周</button>
+      <button type="button" data-mode="month" aria-pressed="false">月</button>
+      <button type="button" data-mode="year" aria-pressed="false">年</button>
+    </div>
+    <div class="period" id="periodBox">
+      <button type="button" class="icon-btn" id="prevP" aria-label="上一周期"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 3.5 5.5 8l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button type="button" class="period-btn" id="periodBtn" aria-haspopup="dialog" aria-expanded="false">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2.5" y="3.5" width="11" height="10" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <span id="pLabel"></span><span class="p-range" id="pRange"></span>
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button type="button" class="icon-btn" id="nextP" aria-label="下一周期"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3.5 10.5 8 6 12.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="pop" id="periodPop" role="dialog" aria-label="选择统计周期" hidden></div>
+    </div>
+    <span class="status" id="pStatus"><i></i><span></span></span>
+    <span class="scope" id="scopeInfo"></span>
+  </div>
+
+  <!-- 1 · 总览 -->
+  <section class="card" id="overview" aria-labelledby="ovTitle">
+    <div class="card-head">
+      <div>
+        <h2 id="ovTitle">资源总览</h2>
+        <p class="desc" id="ovDesc"></p>
+      </div>
+      <div class="head-meta">点击部门查看集群明细</div>
+    </div>
+    <div class="table-wrap">
+      <table class="tbl ov">
+        <thead>
+          <tr>
+            <th>三级部门</th>
+            <th class="r">集群</th>
+            <th>集群类型</th>
+            <th class="r" data-k="cards"><button type="button" class="sort" data-k="cards">总卡数</button></th>
+            <th data-k="util"><button type="button" class="sort" data-k="util">GPU 利用率</button></th>
+            <th data-k="sched"><button type="button" class="sort" data-k="sched">GPU 调度率</button></th>
+            <th aria-hidden="true"></th>
+          </tr>
+        </thead>
+        <tbody id="ovBody"></tbody>
+        <tfoot id="ovFoot">
+          <tr id="ovTotal">
+            <td>合计</td>
+            <td class="r num tc"></td>
+            <td><div class="chips tt"></div></td>
+            <td class="r"><div class="cards tcards"></div></td>
+            <td class="mu"><div class="mcell"><div class="meter"><i></i></div><span class="mval"></span></div></td>
+            <td class="ms"><div class="mcell"><div class="meter sched"><i></i></div><span class="mval"></span></div></td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </section>
+
+  <div class="grid-2">
+    <!-- 2 · 集群明细 -->
+    <section class="card" id="detail" aria-labelledby="dtTitle">
+      <div class="card-head">
+        <div class="head-left">
+          <div class="dd" id="deptDD">
+            <button type="button" class="dd-btn" id="deptBtn" aria-haspopup="listbox" aria-expanded="false">
+              <span class="dd-k">三级部门</span><span class="dd-v" id="deptName"></span>
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <div class="pop dd-menu" id="deptMenu" role="listbox" aria-label="选择三级部门" hidden></div>
+          </div>
+          <div>
+            <h2 id="dtTitle">集群明细</h2>
+            <p class="desc">按 NPU / GPU 集群分组 · 点击集群查看趋势</p>
+          </div>
+        </div>
+        <div class="head-meta" id="dtMeta"></div>
+      </div>
+      <div class="table-wrap">
+        <table class="tbl cl">
+          <thead>
+            <tr>
+              <th class="ctype-h">集群类型</th>
+              <th>集群名称</th>
+              <th class="r">卡数</th>
+              <th>GPU 利用率</th>
+              <th>GPU 调度率</th>
+            </tr>
+          </thead>
+          <tbody id="clBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 3 · 训练任务 -->
+    <section class="card" id="tasks" aria-labelledby="tkTitle">
+      <div class="card-head">
+        <div>
+          <h2 id="tkTitle">训练任务统计</h2>
+          <p class="desc" id="tkScope"></p>
+        </div>
+      </div>
+      <div class="kpis">
+        <div class="kpi"><span class="k-label">任务总数</span><span class="k-val" id="kN"></span></div>
+        <div class="kpi"><span class="k-label">总训练卡时</span><span class="k-val" id="kCH"></span></div>
+      </div>
+      <div class="pies">
+        <figure class="pie" id="pieDur">
+          <figcaption>训练时长分布 <span>按任务数</span></figcaption>
+          <div class="pie-body"><svg role="img" aria-label="训练时长分布"></svg><div class="pie-center"><div class="pc-val"></div><div class="pc-label"></div><div class="pc-sub"></div></div></div>
+          <ul class="legend"></ul>
+        </figure>
+        <figure class="pie" id="pieCH">
+          <figcaption>训练卡时分布 <span>按单任务卡时区间</span></figcaption>
+          <div class="pie-body"><svg role="img" aria-label="训练卡时分布"></svg><div class="pie-center"><div class="pc-val"></div><div class="pc-label"></div><div class="pc-sub"></div></div></div>
+          <ul class="legend"></ul>
+        </figure>
+      </div>
+    </section>
+  </div>
+
+  <!-- 4 · 集群趋势 -->
+  <section class="card" id="trend" aria-labelledby="trTitle">
+    <div class="card-head">
+      <div>
+        <div class="trend-title"><h2 id="trTitle">集群趋势</h2><span class="mono" id="trendName"></span></div>
+        <p class="desc" id="trendMeta"></p>
+      </div>
+      <div class="lg">
+        <span class="lg-item"><i class="lk" style="background: var(--util)"></i>GPU 利用率</span>
+        <span class="lg-item"><i class="lk" style="background: var(--sched)"></i>GPU 调度率</span>
+      </div>
+    </div>
+    <div class="chart" id="chart">
+      <svg id="chartSvg" tabindex="0" role="img" aria-label="GPU 利用率与调度率趋势"></svg>
+      <div class="tip" id="tip" hidden>
+        <div class="tip-t" id="tipT"></div>
+        <div class="tip-row"><i style="background: var(--util)"></i><b id="tipU"></b><span>GPU 利用率</span></div>
+        <div class="tip-row"><i style="background: var(--sched)"></i><b id="tipS"></b><span>GPU 调度率</span></div>
+      </div>
+    </div>
+    <p class="chart-foot" id="trendFoot"></p>
+  </section>
+
+  <footer class="notes">
+    <div><b>GPU 利用率</b>统计周期内 GPU / NPU 平均算力活跃度；集群类型、部门层级按卡数加权。</div>
+    <div><b>GPU 调度率</b>已分配卡时 ÷ 总卡时，反映资源被任务占用的程度。</div>
+    <div><b>训练卡时</b>任务占用卡数 × 运行时长；按统计周期内结束的训练任务计。</div>
+    <div><b>状态标记</b>调度率不低于 95% 的集群标记“满载”。</div>
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script>
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+
+  /* ---------- theme switch ---------- */
+  const root = document.documentElement;
+  const THEME_KEY = 'resource-board-theme';
+  const mqDark = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : null;
+  const isDark = () => root.dataset.theme === 'dark' || (root.dataset.theme !== 'light' && !!(mqDark && mqDark.matches));
+  function syncThemeSwitch() {
+    const dark = isDark();
+    $('themeBtn').setAttribute('aria-checked', String(dark));
+    $('themeBtn').querySelector('.ts-label').textContent = dark ? '深色' : '浅色';
+  }
+  $('themeBtn').addEventListener('click', () => {
+    const next = isDark() ? 'light' : 'dark';
+    root.dataset.theme = next;
+    try { localStorage.setItem(THEME_KEY, next); } catch (e) { /* storage unavailable: the choice lasts for this visit */ }
+    syncThemeSwitch();
+  });
+  if (mqDark && mqDark.addEventListener) mqDark.addEventListener('change', syncThemeSwitch);
+  new MutationObserver(syncThemeSwitch).observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+  syncThemeSwitch();
+
+  /* ---------- time ---------- */
+  const DAY = 864e5, HOUR = 36e5;
+  const EPOCH = Date.UTC(2024, 0, 1);                 // earliest data (Monday)
+  const now0 = new Date();                            // wall clock encoded as UTC
+  const TODAY = Date.UTC(now0.getFullYear(), now0.getMonth(), now0.getDate());
+  const NOW = TODAY + now0.getHours() * HOUR;
+  const REDUCED = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const DUR = REDUCED ? 0 : 450;
+  const WD = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+  const pad = n => String(n).padStart(2, '0');
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const dayIdx = t => Math.round((t - EPOCH) / DAY);
+  const md = (t, sep = '.') => { const d = new Date(t); return pad(d.getUTCMonth() + 1) + sep + pad(d.getUTCDate()); };
+  const dow = t => (new Date(t).getUTCDay() + 6) % 7;
+
+  function isoWeekStart(y, w) {
+    const jan4 = Date.UTC(y, 0, 4);
+    return jan4 - dow(jan4) * DAY + (w - 1) * 7 * DAY;
+  }
+  function isoWeekOf(t) {
+    const thu = t - dow(t) * DAY + 3 * DAY;
+    const y = new Date(thu).getUTCFullYear();
+    return { y, w: 1 + Math.floor((thu - isoWeekStart(y, 1)) / (7 * DAY)) };
+  }
+  const isoWeeksInYear = y => isoWeekOf(Date.UTC(y, 11, 28)).w;
+
+  function periodRange(p) {
+    if (p.mode === 'week') { const s = isoWeekStart(p.y, p.i); return [s, s + 7 * DAY]; }
+    if (p.mode === 'month') return [Date.UTC(p.y, p.i, 1), Date.UTC(p.y, p.i + 1, 1)];
+    return [Date.UTC(p.y, 0, 1), Date.UTC(p.y + 1, 0, 1)];
+  }
+  function periodOf(mode, t) {
+    if (mode === 'week') { const w = isoWeekOf(t); return { mode, y: w.y, i: w.w }; }
+    const d = new Date(t);
+    return mode === 'month' ? { mode, y: d.getUTCFullYear(), i: d.getUTCMonth() } : { mode, y: d.getUTCFullYear(), i: 0 };
+  }
+  const pkey = p => p.mode + ':' + p.y + ':' + p.i;
+  const shiftPeriod = (p, k) => { const [s, e] = periodRange(p); return periodOf(p.mode, k < 0 ? s - DAY : e); };
+  const isAvail = p => { const [s, e] = periodRange(p); return s <= NOW && e > EPOCH; };
+  const isLive = p => periodRange(p)[1] > NOW;
+  const periodLabel = p => p.mode === 'week' ? `${p.y}年第${p.i}周` : p.mode === 'month' ? `${p.y}年${p.i + 1}月` : `${p.y}年`;
+  const periodRangeText = p => { const [s, e] = periodRange(p); return `${md(s)} – ${md(e - DAY)}`; };
+  const GRAN = { week: '按小时', month: '按天', year: '按周' };
+  const nowText = () => `${md(NOW, '/')} ${pad(new Date(NOW).getUTCHours())}:00`;
+
+  /* ---------- deterministic noise ---------- */
+  function h2(a, b) {
+    let x = Math.imul(a | 0, 0x27d4eb2d) ^ Math.imul((b | 0) + 0x165667b1, 0x85ebca6b);
+    x ^= x >>> 15; x = Math.imul(x, 0x2c1b3c6d);
+    x ^= x >>> 12; x = Math.imul(x, 0x297a2d39);
+    x ^= x >>> 15;
+    return (x >>> 0) / 4294967296;
+  }
+  function vnoise(seed, x) {
+    const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f);
+    return (h2(seed, i) * (1 - u) + h2(seed, i + 1) * u) * 2 - 1;
+  }
+  function strHash(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+  function mulberry32(a) {
+    return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  }
+
+  /* ---------- organisation ---------- */
+  const KIND_ORDER = ['NPU', 'GPU'];
+  const KIND_LABEL = { GPU: 'GPU 集群', NPU: 'NPU 集群' };
+  const kindOf = type => (type === '910B' ? 'NPU' : 'GPU');
+  const DEPTS_SPEC = [
+    { id: 'pretrain', name: '预训练部', path: '技术中台 › 基础模型中心', jobs: 'large',
+      clusters: [['H800', 'wlcb', 'train', 4096], ['H800', 'wlcb', 'train', 2048], ['H800', 'bj', 'train', 1024], ['A800', 'sh', 'train', 2048], ['A800', 'bj', 'dev', 512], ['910B', 'gy', 'train', 2048]] },
+    { id: 'mm', name: '多模态生成部', path: '技术中台 › 基础模型中心', jobs: 'mid',
+      clusters: [['H800', 'wlcb', 'train', 2048], ['A800', 'sh', 'train', 1024], ['A800', 'hz', 'dev', 256], ['H20', 'sh', 'infer', 768], ['L20', 'hz', 'infer', 384]] },
+    { id: 'align', name: '对齐与推理优化部', path: '技术中台 › 基础模型中心', jobs: 'mid',
+      clusters: [['H800', 'bj', 'train', 1024], ['H20', 'bj', 'infer', 1536], ['H20', 'sh', 'infer', 1024], ['L20', 'hz', 'dev', 256]] },
+    { id: 'rec', name: '搜索推荐算法部', path: '商业技术部 › 算法平台中心', jobs: 'small',
+      clusters: [['A800', 'bj', 'train', 1024], ['A800', 'sh', 'train', 768], ['H20', 'bj', 'infer', 512], ['L20', 'sz', 'infer', 512], ['L20', 'sz', 'dev', 128]] },
+    { id: 'voice', name: '语音交互部', path: '智能终端事业部 › 语音与视觉中心', jobs: 'small',
+      clusters: [['A800', 'hz', 'train', 512], ['L20', 'hz', 'infer', 256], ['910B', 'gy', 'train', 1024], ['910B', 'gy', 'dev', 128]] },
+    { id: 'adas', name: '自动驾驶感知部', path: '智能汽车事业部 › 智驾研发中心', jobs: 'mid',
+      clusters: [['H800', 'wlcb', 'train', 1024], ['A800', 'sh', 'train', 1536], ['A800', 'sz', 'dev', 256], ['910B', 'gy', 'train', 1024], ['L20', 'sz', 'infer', 256]] },
+  ];
+
+  const CLUSTERS = [];
+  const counters = {};
+  const DEPTS = DEPTS_SPEC.map(spec => {
+    const dept = { id: spec.id, name: spec.name, path: spec.path, jobs: spec.jobs, clusters: [] };
+    spec.clusters.forEach(([type, region, purpose, cards]) => {
+      const base = `${region}-${type.toLowerCase()}-${purpose}`;
+      counters[base] = (counters[base] || 0) + 1;
+      const name = `${base}-${pad(counters[base])}`;
+      const seed = strHash(name) % 1000000;
+      const r = k => h2(seed, 900 + k);
+      const prof = {
+        train: { sb: 0.86 + 0.08 * r(1), eb: 0.62 + 0.18 * r(2), wk: 0, amp: 0.022, ampE: 0.05 },
+        infer: { sb: 0.70 + 0.14 * r(1), eb: 0.48 + 0.16 * r(2), wk: 0.04, amp: 0.10, ampE: 0.10 },
+        dev:   { sb: 0.52 + 0.20 * r(1), eb: 0.40 + 0.16 * r(2), wk: 0.16, amp: 0.16, ampE: 0.10 },
+      }[purpose];
+      const c = Object.assign({ id: name, name, dept: dept.id, type, kind: kindOf(type), purpose, cards, seed, idx: CLUSTERS.length, growth: r(3) }, prof);
+      dept.clusters.push(c);
+      CLUSTERS.push(c);
+    });
+    return dept;
+  });
+  const DEPT_BY_ID = new Map(DEPTS.map(d => [d.id, d]));
+  const CL_BY_ID = new Map(CLUSTERS.map(c => [c.id, c]));
+  const largest = dept => dept.clusters.reduce((a, b) => (b.cards > a.cards ? b : a));
+  const sumCards = list => d3.sum(list, c => c.cards);
+
+  /* ---------- metric model ---------- */
+  const dayCache = new Map();
+  function dayVals(c, d) {
+    const key = c.idx * 1e6 + d + 5e5;
+    let v = dayCache.get(key);
+    if (v) return v;
+    const s = c.seed, weekend = ((d % 7) + 7) % 7 >= 5, yrs = d / 365;
+    let sched = c.sb + 0.025 * (yrs - 1.8) * (0.6 + c.growth) + 0.05 * vnoise(s + 1, d / 11) + 0.022 * vnoise(s + 2, d / 3.3);
+    if (weekend) sched -= c.wk;
+    if (sched > 0.9) sched = 0.9 + (sched - 0.9) * 0.55;
+    if (h2(s + 3, d) < 0.012) sched *= 0.3 + 0.2 * h2(s + 8, d);       // maintenance day
+    sched = clamp(sched, 0.04, 0.995);
+    let eff = c.eb + 0.03 * (yrs - 1.8) + 0.05 * vnoise(s + 4, d / 8) + 0.02 * vnoise(s + 5, d / 2.2);
+    if (weekend) eff -= c.wk * 0.5;
+    eff = clamp(eff, 0.18, 0.95);
+    v = [sched, sched * eff];
+    dayCache.set(key, v);
+    return v;
+  }
+  // 24 hourly values whose mean equals the daily value, so every granularity agrees
+  function hourVals(c, d) {
+    const [S, U] = dayVals(c, d);
+    const s = c.seed, weekend = ((d % 7) + 7) % 7 >= 5;
+    const rs = [], ru = [];
+    let ms = 0, mu = 0;
+    for (let h = 0; h < 24; h++) {
+      const hi = d * 24 + h;
+      let shape;
+      if (c.purpose === 'infer') shape = 0.62 * Math.cos(2 * Math.PI * (h - 14) / 24) + 0.38 * Math.cos(4 * Math.PI * (h - 10.5) / 24);
+      else if (c.purpose === 'dev') shape = (weekend ? 0.35 : 1) * (Math.exp(-(((h - 15) / 4.2) ** 2)) * 1.6 - 0.45);
+      else shape = Math.cos(2 * Math.PI * (h - 15) / 24);
+      const sv = S + c.amp * shape + 0.012 * vnoise(s + 6, hi / 4);
+      const uv = sv * (U / S + c.ampE * shape + 0.02 * vnoise(s + 7, hi / 3));
+      rs.push(sv); ru.push(uv); ms += sv; mu += uv;
+    }
+    ms /= 24; mu /= 24;
+    return rs.map((v, h) => {
+      const sv = clamp(v + S - ms, 0.02, 0.998);
+      return [sv, clamp(ru[h] + U - mu, 0.01, sv * 0.985)];
+    });
+  }
+
+  const aggCache = new Map();
+  function clusterAgg(c, p) {
+    const key = c.id + '|' + pkey(p);
+    let a = aggCache.get(key);
+    if (a) return a;
+    const [s, e0] = periodRange(p), e = Math.min(e0, TODAY + DAY);
+    let S = 0, U = 0, n = 0;
+    for (let t = s; t < e; t += DAY) { const v = dayVals(c, dayIdx(t)); S += v[0]; U += v[1]; n++; }
+    a = { sched: S / n, util: U / n };
+    aggCache.set(key, a);
+    return a;
+  }
+  function groupAgg(list, p) {
+    let cards = 0, S = 0, U = 0;
+    list.forEach(c => { const a = clusterAgg(c, p); cards += c.cards; S += a.sched * c.cards; U += a.util * c.cards; });
+    return { cards, sched: S / cards, util: U / cards };
+  }
+  function clusterSeries(c, p) {
+    const [s, e] = periodRange(p), out = [];
+    if (p.mode === 'week') {
+      for (let t = s; t < e && t <= NOW; t += DAY) {
+        const hv = hourVals(c, dayIdx(t));
+        for (let h = 0; h < 24; h++) { const tt = t + h * HOUR; if (tt > NOW) break; out.push({ t: tt, util: hv[h][1], sched: hv[h][0] }); }
+      }
+    } else if (p.mode === 'month') {
+      for (let t = s; t < e && t <= TODAY; t += DAY) { const v = dayVals(c, dayIdx(t)); out.push({ t, util: v[1], sched: v[0] }); }
+    } else {
+      const W = isoWeeksInYear(p.y);
+      for (let w = 1; w <= W; w++) {
+        const ws = isoWeekStart(p.y, w);
+        if (ws > TODAY) break;
+        let S = 0, U = 0, n = 0;
+        for (let t = ws; t < ws + 7 * DAY && t <= TODAY; t += DAY) { const v = dayVals(c, dayIdx(t)); S += v[0]; U += v[1]; n++; }
+        out.push({ t: ws, w, util: U / n, sched: S / n });
+      }
+    }
+    return out;
+  }
+  function xDomain(p) {
+    const [s, e] = periodRange(p);
+    if (p.mode === 'week') return [s, e - HOUR];
+    if (p.mode === 'month') return [s, e - DAY];
+    return [isoWeekStart(p.y, 1), isoWeekStart(p.y, isoWeeksInYear(p.y))];
+  }
+
+  /* ---------- training tasks ---------- */
+  const CARD_SIZES = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048];
+  const JOB_PROFILES = {
+    large: { w: [8, 5, 6, 26, 14, 11, 9, 7, 5, 3, 1.6, 0.7], mu: 0.75 },
+    mid:   { w: [14, 8, 10, 30, 14, 9, 6, 4, 2.2, 1, 0.4, 0.1], mu: 0.6 },
+    small: { w: [22, 12, 14, 28, 11, 6, 3.5, 2, 0.8, 0.3, 0.08, 0], mu: 0.45 },
+  };
+  const DUR_BUCKETS = [['< 1 小时', 1], ['1–6 小时', 6], ['6–24 小时', 24], ['1–7 天', 168], ['> 7 天', Infinity]];
+  const CH_BUCKETS = [['< 100', 100], ['100–1千', 1e3], ['1千–1万', 1e4], ['1万–10万', 1e5], ['≥ 10万', Infinity]];
+  const bucketOf = (list, v) => { for (let i = 0; i < list.length; i++) if (v < list[i][1]) return i; return list.length - 1; };
+  const taskCache = new Map();
+  function taskStats(dept, p) {
+    const key = dept.id + '|' + pkey(p);
+    if (taskCache.has(key)) return taskCache.get(key);
+    const [s, e] = periodRange(p);
+    const hours = Math.max(1, (Math.min(e, NOW) - s) / HOUR);
+    const agg = groupAgg(dept.clusters, p);
+    const target = agg.cards * hours * agg.sched * 0.7;   // ~70% of allocated card-hours go to training
+    const cap = target * 0.15;
+    const rng = mulberry32(strHash(key));
+    const prof = JOB_PROFILES[dept.jobs];
+    const cum = d3.cumsum(prof.w), wsum = cum[cum.length - 1];
+    const gauss = () => Math.sqrt(-2 * Math.log(1 - rng())) * Math.cos(2 * Math.PI * rng());
+    const dur = [0, 0, 0, 0, 0], chSum = [0, 0, 0, 0, 0], chN = [0, 0, 0, 0, 0];
+    let total = 0, n = 0;
+    while (total < target) {
+      const u = rng() * wsum;
+      let k = 0; while (cum[k] < u) k++;
+      const cards = CARD_SIZES[k];
+      let hrs = clamp(Math.exp(prof.mu + 0.3 * Math.log2(cards) + 1.15 * gauss()), 0.05, 24 * 30);
+      let ch = cards * hrs;
+      if (ch > cap) { hrs = cap / cards; ch = cap; }
+      total += ch; n++;
+      dur[bucketOf(DUR_BUCKETS, hrs)]++;
+      const b = bucketOf(CH_BUCKETS, ch); chSum[b] += ch; chN[b]++;
+    }
+    const res = {
+      n, total,
+      dur: DUR_BUCKETS.map((b, i) => ({ i, label: b[0], value: dur[i] })),
+      ch: CH_BUCKETS.map((b, i) => ({ i, label: b[0], value: chSum[i], count: chN[i] })),
+    };
+    taskCache.set(key, res);
+    return res;
+  }
+
+  /* ---------- formatting ---------- */
+  const fmtInt = d3.format(',');
+  const fmtPct = v => (v * 100).toFixed(1) + '%';
+  function fmtWan(v) {
+    if (v >= 1e8) return [(v / 1e8).toFixed(2), '亿'];
+    if (v >= 1e6) return [fmtInt(Math.round(v / 1e4)), '万'];
+    if (v >= 1e4) return [(v / 1e4).toFixed(1), '万'];
+    return [fmtInt(Math.round(v)), ''];
+  }
+  function setValUnit(node, val, unit) {
+    node.textContent = val;
+    if (unit) { const s = document.createElement('small'); s.textContent = unit; node.appendChild(s); }
+  }
+
+  /* ---------- state ---------- */
+  const lastWeek = periodOf('week', TODAY - 7 * DAY);
+  const state = {
+    period: isAvail(lastWeek) ? lastWeek : periodOf('week', TODAY),
+    scope: 'ALL',                                     // global 三级部门 filter: 'ALL' or a dept id
+    deptId: DEPTS[0].id,
+    clusterId: largest(DEPTS[0]).id,
+    sort: { k: 'cards', dir: -1 },
+  };
+
+  /* ---------- popovers: only one open at a time ---------- */
+  const closers = [];
+  const closeAll = () => closers.forEach(fn => fn(false));
+
+  /* ---------- toolbar & period picker ---------- */
+  function renderToolbar() {
+    const p = state.period;
+    d3.selectAll('#modeSeg button').attr('aria-pressed', function () { return String(this.dataset.mode === p.mode); });
+    $('pLabel').textContent = periodLabel(p);
+    $('pRange').textContent = periodRangeText(p);
+    $('prevP').disabled = !isAvail(shiftPeriod(p, -1));
+    $('nextP').disabled = !isAvail(shiftPeriod(p, 1));
+    const live = isLive(p), st = $('pStatus');
+    st.classList.toggle('live', live);
+    st.lastChild.textContent = live ? `进行中 · 数据截至 ${nowText()}` : '已完结';
+    const sd = state.scope === 'ALL' ? null : DEPT_BY_ID.get(state.scope);
+    $('scopeName').textContent = sd ? sd.name : 'ALL';
+    $('scopeInfo').textContent = sd
+      ? `${sd.clusters.length} 个集群 · ${fmtInt(sumCards(sd.clusters))} 卡`
+      : `${DEPTS.length} 个三级部门 · ${CLUSTERS.length} 个集群 · ${fmtInt(sumCards(CLUSTERS))} 卡`;
+  }
+
+  const pop = { open: false, year: 0 };
+  function openPop() {
+    closeAll();
+    pop.open = true;
+    pop.year = state.period.y;
+    renderPop();
+    $('periodPop').hidden = false;
+    $('periodBtn').setAttribute('aria-expanded', 'true');
+    const on = $('periodPop').querySelector('.pcell.on') || $('periodPop').querySelector('.pcell:not(:disabled)');
+    if (on) on.focus();
+  }
+  function closePop(refocus) {
+    if (!pop.open) return;
+    pop.open = false;
+    $('periodPop').hidden = true;
+    $('periodBtn').setAttribute('aria-expanded', 'false');
+    if (refocus) $('periodBtn').focus();
+  }
+  closers.push(closePop);
+  function periodCell(q, text, foot) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'pcell';
+    b.textContent = text;
+    const av = isAvail(q);
+    b.disabled = !av;
+    if (pkey(q) === pkey(state.period)) { b.classList.add('on'); b.setAttribute('aria-current', 'true'); }
+    if (av && isLive(q)) { b.classList.add('live'); b.title = '进行中'; }
+    b.addEventListener('click', () => { closePop(true); setPeriod(q); });
+    if (foot) {
+      const txt = `${periodLabel(q)} · ${periodRangeText(q)}${isLive(q) ? ' · 进行中' : ''}`;
+      b.addEventListener('pointerenter', () => { foot.textContent = txt; });
+      b.addEventListener('focus', () => { foot.textContent = txt; });
+    }
+    return b;
+  }
+  function renderPop() {
+    const box = $('periodPop');
+    box.textContent = '';
+    const mode = state.period.mode;
+    const minY = 2024;
+    const maxY = mode === 'week' ? isoWeekOf(TODAY).y : new Date(TODAY).getUTCFullYear();
+    if (mode === 'year') {
+      const t = document.createElement('div'); t.className = 'pop-title'; t.textContent = '选择年份';
+      const g = document.createElement('div'); g.className = 'pgrid g3';
+      for (let y = minY; y <= maxY; y++) g.appendChild(periodCell({ mode, y, i: 0 }, y + '年'));
+      box.append(t, g);
+      return;
+    }
+    const head = document.createElement('div'); head.className = 'pop-head';
+    const prev = document.createElement('button'); prev.type = 'button'; prev.className = 'icon-btn'; prev.setAttribute('aria-label', '上一年');
+    prev.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 3.5 5.5 8l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    const next = document.createElement('button'); next.type = 'button'; next.className = 'icon-btn'; next.setAttribute('aria-label', '下一年');
+    next.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3.5 10.5 8 6 12.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    prev.disabled = pop.year <= minY; next.disabled = pop.year >= maxY;
+    prev.addEventListener('click', () => { pop.year--; renderPop(); });
+    next.addEventListener('click', () => { pop.year++; renderPop(); });
+    const title = document.createElement('strong'); title.textContent = pop.year + ' 年';
+    head.append(prev, title, next);
+    box.appendChild(head);
+    if (mode === 'month') {
+      const g = document.createElement('div'); g.className = 'pgrid g4';
+      for (let m = 0; m < 12; m++) g.appendChild(periodCell({ mode, y: pop.year, i: m }, (m + 1) + '月'));
+      box.appendChild(g);
+      return;
+    }
+    const foot = document.createElement('div'); foot.className = 'pop-foot';
+    const rows = document.createElement('div'); rows.className = 'wk-rows';
+    const byMonth = d3.range(12).map(() => []);
+    for (let w = 1, W = isoWeeksInYear(pop.year); w <= W; w++) {
+      byMonth[new Date(isoWeekStart(pop.year, w) + 3 * DAY).getUTCMonth()].push(w);
+    }
+    byMonth.forEach((weeks, m) => {
+      const row = document.createElement('div'); row.className = 'wk-row';
+      const lab = document.createElement('span'); lab.className = 'wk-m'; lab.textContent = (m + 1) + '月';
+      const cells = document.createElement('div'); cells.className = 'wk-cells';
+      weeks.forEach(w => cells.appendChild(periodCell({ mode, y: pop.year, i: w }, String(w), foot)));
+      row.append(lab, cells);
+      rows.appendChild(row);
+    });
+    const sel = state.period;
+    foot.textContent = sel.y === pop.year ? `已选 ${periodLabel(sel)} · ${periodRangeText(sel)}` : '悬停查看每周日期范围';
+    box.append(rows, foot);
+  }
+  function setPeriod(p) {
+    state.period = p;
+    renderAll();
+  }
+  function switchMode(mode) {
+    const p0 = state.period;
+    if (mode === p0.mode) return;
+    const ref = Math.min(periodRange(p0)[1] - DAY, TODAY);
+    let p = periodOf(mode, ref);
+    if (mode === 'week' && isLive(p) && isAvail(shiftPeriod(p, -1))) p = shiftPeriod(p, -1);
+    closePop();
+    setPeriod(p);
+  }
+
+  /* ---------- 三级部门 dropdowns ---------- */
+  const CHECK = '<svg class="ck" width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="m3.5 8.5 3 3 6-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const deptOption = d => ({ id: d.id, name: d.name, sub: d.path, meta: `${d.clusters.length} 集群 · ${fmtInt(sumCards(d.clusters))} 卡` });
+  function createDropdown(cfg) {
+    const rootEl = $(cfg.root), btn = $(cfg.btn), menu = $(cfg.menu);
+    let open = false;
+    function render() {
+      d3.select(menu).selectAll('button').data(cfg.options(), d => d.id)
+        .join(enter => enter.append('button').attr('type', 'button').attr('role', 'option')
+          .attr('class', d => 'dd-item' + (d.id === 'ALL' ? ' all' : ''))
+          .each(function () { this.innerHTML = CHECK + '<span><span class="nm"></span><span class="pt"></span></span><span class="ct"></span>'; })
+          .on('click', (ev, d) => { close(true); cfg.onPick(d.id); }))
+        .attr('aria-selected', d => String(d.id === cfg.selected()))
+        .each(function (d) {
+          this.querySelector('.nm').textContent = d.name;
+          this.querySelector('.pt').textContent = d.sub;
+          this.querySelector('.ct').textContent = d.meta;
+        });
+    }
+    function show() {
+      closeAll();
+      open = true;
+      render();
+      menu.hidden = false;
+      btn.setAttribute('aria-expanded', 'true');
+      const cur = menu.querySelector('[aria-selected="true"]');
+      if (cur) cur.focus();
+    }
+    function close(refocus) {
+      if (!open) return;
+      open = false;
+      menu.hidden = true;
+      btn.setAttribute('aria-expanded', 'false');
+      if (refocus) btn.focus();
+    }
+    btn.addEventListener('click', () => (open ? close() : show()));
+    menu.addEventListener('keydown', ev => {
+      if (ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp') return;
+      ev.preventDefault();
+      const items = [...menu.querySelectorAll('.dd-item')];
+      const i = items.indexOf(document.activeElement);
+      items[(i + (ev.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length].focus();
+    });
+    closers.push(close);
+    return { root: rootEl, isOpen: () => open, close };
+  }
+  const scopeDD = createDropdown({
+    root: 'scopeDD', btn: 'scopeBtn', menu: 'scopeMenu',
+    options: () => [{ id: 'ALL', name: 'ALL', sub: '全部三级部门', meta: `${CLUSTERS.length} 集群 · ${fmtInt(sumCards(CLUSTERS))} 卡` }].concat(DEPTS.map(deptOption)),
+    selected: () => state.scope,
+    onPick: setScope,
+  });
+  // A single department in the global filter also fixes the detail department
+  function setScope(id) {
+    state.scope = id;
+    if (id !== 'ALL' && state.deptId !== id) {
+      state.deptId = id;
+      state.clusterId = largest(DEPT_BY_ID.get(id)).id;
+    }
+    renderAll();
+  }
+  const dtDD = createDropdown({
+    root: 'deptDD', btn: 'deptBtn', menu: 'deptMenu',
+    options: () => DEPTS.map(deptOption),
+    selected: () => state.deptId,
+    onPick: id => selectDept(id, false),
+  });
+
+  /* ---------- shared cell fillers ---------- */
+  function fillMeter(cell, v) {
+    cell.select('.meter i').transition().duration(DUR).ease(d3.easeCubicOut).style('width', (v * 100).toFixed(2) + '%');
+    cell.select('.mval').text(fmtPct(v));
+  }
+  function kindCounts(list) {
+    return KIND_ORDER.map(k => ({ k, n: list.filter(c => c.kind === k).length })).filter(d => d.n);
+  }
+  function fillChips(sel, list) {
+    sel.selectAll('.chip').data(kindCounts(list), d => d.k).join('span').attr('class', 'chip')
+      .text(d => d.k).append('b').text(d => '×' + d.n);
+  }
+
+  /* ---------- 1 · overview ---------- */
+  const OV_ROW = '<td><div class="dn"></div><div class="dp"></div></td>' +
+    '<td class="r num cc"></td>' +
+    '<td><div class="chips"></div></td>' +
+    '<td class="r"><div class="cards"></div></td>' +
+    '<td class="mu"><div class="mcell"><div class="meter"><i></i></div><span class="mval"></span></div></td>' +
+    '<td class="ms"><div class="mcell"><div class="meter sched"><i></i></div><span class="mval"></span></div></td>' +
+    '<td class="go"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3.5 10.5 8 6 12.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></td>';
+
+  function renderOverview() {
+    const p = state.period, isAll = state.scope === 'ALL';
+    const scoped = isAll ? DEPTS : [DEPT_BY_ID.get(state.scope)];
+    $('ovDesc').textContent = isAll
+      ? `全部 ${DEPTS.length} 个三级部门 · 利用率与调度率按卡数加权`
+      : `${scoped[0].path} › ${scoped[0].name} · 利用率与调度率按卡数加权`;
+    const rows = scoped.map(d => Object.assign({ key: d.id, dept: d }, groupAgg(d.clusters, p)));
+    const { k, dir } = state.sort;
+    rows.sort((a, b) => dir * (a[k] - b[k]));
+    d3.selectAll('.ov th[data-k]').attr('aria-sort', function () { return this.dataset.k === k ? (dir < 0 ? 'descending' : 'ascending') : null; });
+
+    d3.select('#ovBody').selectAll('tr').data(rows, d => d.key)
+      .join(enter => enter.append('tr').attr('class', 'row').attr('tabindex', 0).each(function () { this.innerHTML = OV_ROW; }))
+      .order()
+      .classed('is-sel', d => d.key === state.deptId)
+      .each(function (d) {
+        const tr = d3.select(this);
+        tr.select('.dn').text(d.dept.name);
+        tr.select('.dp').text(d.dept.path);
+        tr.select('.cc').text(d.dept.clusters.length);
+        fillChips(tr.select('.chips'), d.dept.clusters);
+        tr.select('.cards').text(fmtInt(d.cards));
+        fillMeter(tr.select('.mu'), d.util);
+        fillMeter(tr.select('.ms'), d.sched);
+      });
+
+    $('ovFoot').hidden = !isAll;
+    if (!isAll) return;
+    const all = groupAgg(CLUSTERS, p);
+    const tot = d3.select('#ovTotal');
+    tot.select('.tc').text(CLUSTERS.length);
+    fillChips(tot.select('.tt'), CLUSTERS);
+    tot.select('.tcards').text(fmtInt(all.cards));
+    fillMeter(tot.select('.mu'), all.util);
+    fillMeter(tot.select('.ms'), all.sched);
+  }
+
+  /* ---------- 2 · cluster detail ---------- */
+  // The 集群类型 cell lives on each group's 平均 row and spans the whole group (rowspan)
+  const AVG_ROW = '<td class="ctype"></td><td class="avg-name">平均</td>' +
+    '<td class="r"><div class="cards"></div></td>' +
+    '<td class="mu"><div class="mcell"><div class="meter"><i></i></div><span class="mval"></span></div></td>' +
+    '<td class="ms"><div class="mcell"><div class="meter sched"><i></i></div><span class="mval"></span></div></td>';
+  const CL_ROW = '<td><div class="cname"><span class="radio" aria-hidden="true"></span><div><div class="cn-main"></div><div class="cn-meta"></div></div></div></td>' +
+    '<td class="r"><div class="cards"></div></td>' +
+    '<td class="mu"><div class="mcell"><div class="meter"><i></i></div><span class="mval"></span></div></td>' +
+    '<td class="ms"><div class="mcell"><div class="meter sched"><i></i></div><span class="mval"></span></div></td>';
+  const ICON_FULL = '<svg width="10" height="10" viewBox="0 0 12 12" fill="none"><rect x="1.5" y="3" width="8" height="6" rx="1.2" stroke="currentColor" stroke-width="1.3"/><path d="M3.3 4.8h4.4v2.4H3.3z" fill="currentColor"/><path d="M10.5 5v2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>';
+
+  function pill(cls, icon, text) {
+    const s = document.createElement('span');
+    s.className = 'pill ' + cls;
+    s.innerHTML = icon;
+    s.appendChild(document.createTextNode(text));
+    return s;
+  }
+
+  function renderDetail() {
+    const p = state.period, dept = DEPT_BY_ID.get(state.deptId);
+    $('deptName').textContent = dept.name;
+    const locked = state.scope !== 'ALL';
+    $('deptBtn').disabled = locked;
+    $('deptBtn').title = locked ? '已由顶部的三级部门筛选决定' : '';
+    const meta = $('dtMeta');
+    meta.textContent = '';
+    [[dept.clusters.length, ' 个集群 · '], [fmtInt(sumCards(dept.clusters)), ' 卡']].forEach(([v, t]) => {
+      const b = document.createElement('b'); b.textContent = v; meta.append(b, t);
+    });
+
+    // each cluster kind: its 平均 row first, then its clusters by card count
+    const items = [];
+    const kinds = KIND_ORDER.filter(kind => dept.clusters.some(c => c.kind === kind));
+    kinds.forEach((kind, gi) => {
+      const list = dept.clusters.filter(c => c.kind === kind).sort((a, b) => b.cards - a.cards);
+      const lastGroup = gi === kinds.length - 1;
+      items.push(Object.assign({ rt: 'avg', key: `a:${dept.id}:${kind}`, kind, span: list.length + 1, lastGroup }, groupAgg(list, p)));
+      list.forEach((c, ci) => items.push(Object.assign({ rt: 'cl', key: c.id, c, groupEnd: !lastGroup && ci === list.length - 1 }, clusterAgg(c, p))));
+    });
+
+    d3.select('#clBody').selectAll('tr').data(items, d => d.key)
+      .join(enter => enter.append('tr')
+        .attr('class', d => (d.rt === 'avg' ? 'avg' : 'row'))
+        .attr('tabindex', d => (d.rt === 'avg' ? null : 0))
+        .each(function (d) { this.innerHTML = d.rt === 'avg' ? AVG_ROW : CL_ROW; }))
+      .order()
+      .each(function (d) {
+        const tr = d3.select(this);
+        if (d.rt === 'avg') {
+          tr.select('.ctype').attr('rowspan', d.span).classed('last', d.lastGroup).text(d.kind);
+          tr.select('.cards').text(fmtInt(d.cards));
+        } else {
+          const c = d.c;
+          tr.classed('is-sel', c.id === state.clusterId).classed('gend', d.groupEnd);
+          tr.select('.cn-main').text(c.name);
+          const m = tr.select('.cn-meta').node();
+          m.textContent = '';
+          if (d.sched >= 0.95) m.appendChild(pill('full', ICON_FULL, '满载'));
+          tr.select('.cards').text(fmtInt(c.cards));
+        }
+        fillMeter(tr.select('.mu'), d.util);
+        fillMeter(tr.select('.ms'), d.sched);
+      });
+  }
+
+  function selectCluster(id) {
+    state.clusterId = id;
+    d3.select('#clBody').selectAll('tr.row').classed('is-sel', d => d.key === id);
+    renderTrend();
+    const card = $('trend'), r = card.getBoundingClientRect();
+    if (r.top > window.innerHeight - 160) card.scrollIntoView({ behavior: REDUCED ? 'auto' : 'smooth', block: 'nearest' });
+  }
+  function selectDept(id, scroll) {
+    if (state.deptId !== id) {
+      state.deptId = id;
+      state.clusterId = largest(DEPT_BY_ID.get(id)).id;
+    }
+    d3.select('#ovBody').selectAll('tr').classed('is-sel', d => d.key === state.deptId);
+    renderDetail();
+    renderTasks();
+    renderTrend();
+    if (scroll) $('detail').scrollIntoView({ behavior: REDUCED ? 'auto' : 'smooth', block: 'start' });
+  }
+
+  /* ---------- 3 · tasks ---------- */
+  function renderPie(rootSel, items, o) {
+    const rootNode = d3.select(rootSel);
+    const R = 84, r0 = 56;
+    const svg = rootNode.select('svg');
+    let g = svg.select('g.arcs');
+    if (g.empty()) { svg.attr('viewBox', '-92 -92 184 184'); g = svg.append('g').attr('class', 'arcs'); }
+    const total = d3.sum(items, d => d.value) || 1;
+    const arc = d3.arc().innerRadius(r0).outerRadius(R).cornerRadius(3);
+    const arcHi = d3.arc().innerRadius(r0).outerRadius(R + 5).cornerRadius(3);
+    const arcs = d3.pie().sort(null).value(d => d.value).padAngle(0.024)(items.filter(d => d.value > 0));
+    const center = rootNode.select('.pie-center');
+    const color = i => `var(--c${i + 1})`;
+
+    function setCenter(d) {
+      const v = center.select('.pc-val').node();
+      if (!d) {
+        setValUnit(v, o.total[0], o.total[1]);
+        center.select('.pc-label').text(o.totalLabel);
+        center.select('.pc-sub').text('');
+      } else {
+        setValUnit(v, (d.value / total * 100).toFixed(1), '%');
+        center.select('.pc-label').text(o.label ? o.label(d) : d.label);
+        center.select('.pc-sub').text(o.sub(d));
+      }
+    }
+    function focus(label) {
+      paths.classed('dim', d => label != null && d.data.label !== label)
+        .interrupt().attr('d', d => (d.data.label === label ? arcHi : arc)(d));
+      lis.classed('on', d => d.label === label);
+      setCenter(label == null ? null : items.find(d => d.label === label));
+    }
+
+    const paths = g.selectAll('path').data(arcs, d => d.data.label)
+      .join(enter => enter.append('path').attr('tabindex', 0)
+        .each(function (d) { this._cur = { startAngle: d.startAngle, endAngle: d.startAngle, padAngle: d.padAngle }; }))
+      .style('fill', d => color(d.data.i))
+      .attr('aria-label', d => `${d.data.label}：${o.fmt(d.data)}，占 ${(d.data.value / total * 100).toFixed(1)}%`)
+      .classed('dim', false)
+      .on('pointerenter focus', (ev, d) => focus(d.data.label))
+      .on('pointerleave blur', () => focus(null));
+    paths.transition().duration(DUR).ease(d3.easeCubicOut).attrTween('d', function (d) {
+      const i = d3.interpolate(this._cur, { startAngle: d.startAngle, endAngle: d.endAngle, padAngle: d.padAngle });
+      this._cur = i(1);
+      return t => arc(i(t));
+    });
+
+    const lis = rootNode.select('.legend').selectAll('li').data(items, d => d.label)
+      .join(enter => enter.append('li').each(function () {
+        this.innerHTML = '<span class="sw"></span><span class="ll"></span><span class="lv"></span><span class="lp"></span>';
+      }))
+      .on('pointerenter', (ev, d) => { if (d.value > 0) focus(d.label); })
+      .on('pointerleave', () => focus(null))
+      .each(function (d) {
+        this.querySelector('.sw').style.background = color(d.i);
+        this.querySelector('.ll').textContent = d.label;
+        this.querySelector('.lv').textContent = o.fmt(d);
+        this.querySelector('.lp').textContent = (d.value / total * 100).toFixed(1) + '%';
+      });
+    setCenter(null);
+  }
+
+  function renderTasks() {
+    const p = state.period, dept = DEPT_BY_ID.get(state.deptId);
+    const st = taskStats(dept, p);
+    $('tkScope').textContent = `${dept.name} · 全部 ${dept.clusters.length} 个集群 · ${periodLabel(p)}${isLive(p) ? '（进行中）' : ''}`;
+    setValUnit($('kN'), fmtInt(st.n), '个');
+    const w = fmtWan(st.total);
+    setValUnit($('kCH'), w[0], w[1]);
+
+    renderPie('#pieDur', st.dur, {
+      total: [fmtInt(st.n), '个'],
+      totalLabel: '训练任务',
+      fmt: d => fmtInt(d.value) + ' 个',
+      sub: d => fmtInt(d.value) + ' 个任务',
+    });
+    renderPie('#pieCH', st.ch, {
+      total: w,
+      totalLabel: '训练卡时',
+      fmt: d => { const f = fmtWan(d.value); return f[0] + f[1]; },
+      label: d => d.label + ' 卡时',
+      sub: d => fmtInt(d.count) + ' 个任务',
+    });
+  }
+
+  /* ---------- 4 · trend ---------- */
+  function timeLabel(d, p) {
+    const dt = new Date(d.t);
+    if (p.mode === 'week') return `${md(d.t, '/')} ${WD[dow(d.t)]} ${pad(dt.getUTCHours())}:00`;
+    if (p.mode === 'month') return `${dt.getUTCFullYear()}/${md(d.t, '/')} ${WD[dow(d.t)]}`;
+    return `第${d.w}周 · ${md(d.t, '/')}–${md(d.t + 6 * DAY, '/')}`;
+  }
+  function xTicks(p, narrow) {
+    const [s, e] = periodRange(p), out = [];
+    if (p.mode === 'week') {
+      for (let k = 0; k < 7; k++) {
+        const t = s + k * DAY;
+        out.push({ t: t + 12 * HOUR, label: narrow ? WD[k] : `${md(t, '/')} ${WD[k]}`, sep: k > 0 ? t : null });
+      }
+    } else if (p.mode === 'month') {
+      (narrow ? [1, 11, 21] : [1, 6, 11, 16, 21, 26]).forEach(dd => {
+        const t = Date.UTC(p.y, p.i, dd);
+        if (t < e) out.push({ t, label: md(t, '/') });
+      });
+    } else {
+      for (let m = 0; m < 12; m += narrow ? 2 : 1) out.push({ t: Date.UTC(p.y, m, 1), label: (m + 1) + '月' });
+    }
+    return out;
+  }
+
+  let trendData = [];
+  function renderTrend() {
+    const c = CL_BY_ID.get(state.clusterId), p = state.period;
+    const dept = DEPT_BY_ID.get(c.dept);
+    trendData = clusterSeries(c, p);
+    $('trendName').textContent = c.name;
+    $('trendMeta').textContent = `${KIND_LABEL[c.kind]} · ${fmtInt(c.cards)} 卡 · ${dept.name}`;
+    $('trendFoot').textContent = `${GRAN[p.mode]}聚合 · ${periodLabel(p)}（${periodRangeText(p)}）· 悬停或聚焦图表后用 ← → 键查看数值`;
+    drawTrend(p, trendData);
+  }
+
+  function drawTrend(p, data) {
+    const wrap = $('chart'), tip = $('tip');
+    const W = Math.max(280, wrap.clientWidth), narrow = W < 640;
+    const H = narrow ? 240 : 300;
+    const m = { top: 14, right: narrow ? 46 : 58, bottom: 30, left: 44 };
+    const svg = d3.select('#chartSvg').attr('viewBox', `0 0 ${W} ${H}`).style('height', H + 'px');
+    svg.selectAll('*').remove();
+    tip.hidden = true;
+    const x = d3.scaleUtc().domain(xDomain(p)).range([m.left, W - m.right]);
+    const y = d3.scaleLinear().domain([0, 1]).range([H - m.bottom, m.top]);
+
+    const grid = svg.append('g').attr('class', 'grid');
+    [0, 0.25, 0.5, 0.75, 1].forEach(v => {
+      grid.append('line').attr('class', v === 0 ? 'base' : null)
+        .attr('x1', m.left).attr('x2', W - m.right).attr('y1', y(v)).attr('y2', y(v));
+      grid.append('text').attr('x', m.left - 10).attr('y', y(v)).attr('dy', '0.32em').attr('text-anchor', 'end').text(v * 100 + '%');
+    });
+    const [x0, x1] = x.range();
+    xTicks(p, narrow).forEach(tk => {
+      if (tk.sep != null) svg.append('line').attr('class', 'sep').attr('x1', x(tk.sep)).attr('x2', x(tk.sep)).attr('y1', m.top).attr('y2', H - m.bottom);
+      const tx = x(tk.t);
+      if (tx < x0 - 1 || tx > x1 + 1) return;
+      svg.append('text').attr('x', tx).attr('y', H - m.bottom + 19).attr('text-anchor', 'middle').text(tk.label);
+    });
+    svg.attr('aria-label', `GPU 利用率与调度率趋势，${periodLabel(p)}，共 ${data.length} 个数据点`);
+    if (!data.length) return;
+
+    const curve = d3.curveMonotoneX;
+    svg.append('path').datum(data).attr('class', 'area')
+      .attr('d', d3.area().x(d => x(d.t)).y0(y(0)).y1(d => y(d.util)).curve(curve));
+    svg.append('path').datum(data).attr('class', 'ln sched')
+      .attr('d', d3.line().x(d => x(d.t)).y(d => y(d.sched)).curve(curve));
+    svg.append('path').datum(data).attr('class', 'ln util')
+      .attr('d', d3.line().x(d => x(d.t)).y(d => y(d.util)).curve(curve));
+
+    const last = data[data.length - 1], lx = x(last.t);
+    if (isLive(p) && x1 - lx > 200) {
+      svg.append('text').attr('class', 'live-note').attr('x', (lx + x1) / 2).attr('y', y(0.14)).attr('text-anchor', 'middle')
+        .text(`数据更新至 ${nowText()}`);
+    }
+    svg.append('circle').attr('class', 'dot sched').attr('r', 4).attr('cx', lx).attr('cy', y(last.sched));
+    svg.append('circle').attr('class', 'dot util').attr('r', 4).attr('cx', lx).attr('cy', y(last.util));
+    if (Math.abs(y(last.util) - y(last.sched)) >= 14) {
+      svg.append('text').attr('class', 'end').attr('x', lx + 9).attr('y', y(last.sched)).attr('dy', '0.32em').text(fmtPct(last.sched));
+      svg.append('text').attr('class', 'end').attr('x', lx + 9).attr('y', y(last.util)).attr('dy', '0.32em').text(fmtPct(last.util));
+    }
+
+    const hover = svg.append('g').style('display', 'none');
+    const cross = hover.append('line').attr('class', 'cross').attr('y1', m.top).attr('y2', H - m.bottom);
+    const hs = hover.append('circle').attr('class', 'dot sched').attr('r', 4.5);
+    const hu = hover.append('circle').attr('class', 'dot util').attr('r', 4.5);
+    const bis = d3.bisector(d => d.t).center;
+    let cur = -1;
+    function show(i) {
+      cur = clamp(i, 0, data.length - 1);
+      const d = data[cur], px = x(d.t);
+      hover.style('display', null);
+      cross.attr('x1', px).attr('x2', px);
+      hs.attr('cx', px).attr('cy', y(d.sched));
+      hu.attr('cx', px).attr('cy', y(d.util));
+      $('tipT').textContent = timeLabel(d, p);
+      $('tipU').textContent = fmtPct(d.util);
+      $('tipS').textContent = fmtPct(d.sched);
+      tip.hidden = false;
+      const tw = tip.offsetWidth;
+      let left = px + 14;
+      if (left + tw > W - 2) left = px - tw - 14;
+      tip.style.left = Math.max(0, left) + 'px';
+      tip.style.top = m.top + 'px';
+    }
+    function hide() { cur = -1; hover.style('display', 'none'); tip.hidden = true; }
+    svg.append('rect').attr('x', m.left).attr('y', m.top).attr('width', W - m.left - m.right).attr('height', H - m.top - m.bottom)
+      .attr('fill', 'transparent')
+      .on('pointermove', ev => show(bis(data, +x.invert(d3.pointer(ev)[0]))))
+      .on('pointerleave', hide);
+    svg.on('keydown', ev => {
+      const step = { ArrowLeft: -1, ArrowRight: 1 }[ev.key];
+      if (step) { ev.preventDefault(); show(cur < 0 ? data.length - 1 : cur + step); }
+      else if (ev.key === 'Home') { ev.preventDefault(); show(0); }
+      else if (ev.key === 'End') { ev.preventDefault(); show(data.length - 1); }
+      else if (ev.key === 'Escape') hide();
+    }).on('focus', () => show(data.length - 1)).on('blur', hide);
+  }
+
+  /* ---------- wiring ---------- */
+  function renderAll() {
+    renderToolbar();
+    renderOverview();
+    renderDetail();
+    renderTasks();
+    renderTrend();
+  }
+
+  d3.selectAll('#modeSeg button').on('click', function () { switchMode(this.dataset.mode); });
+  $('prevP').addEventListener('click', () => { closePop(); setPeriod(shiftPeriod(state.period, -1)); });
+  $('nextP').addEventListener('click', () => { closePop(); setPeriod(shiftPeriod(state.period, 1)); });
+  $('periodBtn').addEventListener('click', () => (pop.open ? closePop() : openPop()));
+  document.addEventListener('pointerdown', ev => {
+    if (pop.open && !$('periodBox').contains(ev.target)) closePop();
+    [scopeDD, dtDD].forEach(dd => { if (dd.isOpen() && !dd.root.contains(ev.target)) dd.close(); });
+  });
+  document.addEventListener('keydown', ev => {
+    if (ev.key !== 'Escape') return;
+    if (pop.open) closePop(true);
+    [scopeDD, dtDD].forEach(dd => { if (dd.isOpen()) dd.close(true); });
+  });
+
+  d3.selectAll('.ov .sort').on('click', function () {
+    const k = this.dataset.k;
+    state.sort = state.sort.k === k ? { k, dir: -state.sort.dir } : { k, dir: -1 };
+    renderOverview();
+  });
+  const activate = (ev, fn) => {
+    if (ev.type === 'keydown' && ev.key !== 'Enter' && ev.key !== ' ') return;
+    if (ev.type === 'keydown') ev.preventDefault();
+    fn();
+  };
+  ['click', 'keydown'].forEach(type => {
+    $('ovBody').addEventListener(type, ev => {
+      const tr = ev.target.closest('tr.row');
+      if (tr) activate(ev, () => selectDept(d3.select(tr).datum().key, true));
+    });
+    $('clBody').addEventListener(type, ev => {
+      const tr = ev.target.closest('tr.row');
+      if (tr) activate(ev, () => selectCluster(d3.select(tr).datum().key));
+    });
+  });
+
+  let lastW = 0, raf = 0;
+  new ResizeObserver(entries => {
+    const w = Math.round(entries[0].contentRect.width);
+    if (!w || w === lastW) return;
+    lastW = w;
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(() => drawTrend(state.period, trendData));
+  }).observe($('chart'));
+
+  renderAll();
+})();
+</script>
